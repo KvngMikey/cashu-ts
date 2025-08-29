@@ -130,13 +130,15 @@ export class MintInfo {
 	}
 
 	/**
-	 * Checks if the mint supports creating BOLT12 offers with a description.
+	 * Checks if the mint supports creating invoices/offers with a description
+	 * for the specified payment method.
 	 *
-	 * @returns True if the mint supports offers with a description, false otherwise.
+	 * @param method - The payment method to check ('bolt11' or 'bolt12')
+	 * @returns True if the mint supports description for the method, false otherwise.
 	 */
-	get supportsBolt12Description() {
+	supportsDescription(method: 'bolt11' | 'bolt12'): boolean {
 		return this._mintInfo.nuts[4]?.methods.some(
-			(method) => method.method === 'bolt12' && method.options?.description === true,
-		);
+			(met) => met.method === method && met.options?.description === true,
+		) ?? false;
 	}
 }

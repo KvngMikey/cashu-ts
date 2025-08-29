@@ -156,6 +156,43 @@ describe('test info', () => {
 			{ method: 'nostr', info: 'npub1337' },
 		]);
 	});
+	test('supportsDescription and createMintQuote description check', async () => {
+		//behaviour with original mintInfoResp
+		server.use(
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(mintInfoResp);
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const info = await wallet.getMintInfo();
+
+		// mintInfoResp advertises description=true only for usd/eur; sat lacks it
+		expect(info.supportsDescription('bolt11')).toBe(false);
+		expect(info.supportsDescription('bolt12')).toBe(false);
+
+		//bolt11 description not supported
+		const noDescResp = JSON.parse(JSON.stringify(mintInfoResp));
+		const bolt11Method = noDescResp.nuts[4].methods.find((x: any) => x.method === 'bolt11');
+		if (bolt11Method) (bolt11Method.options ??= {}).description = false;
+
+		server.use(
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(noDescResp);
+			}),
+		);
+
+		await expect(wallet.createMintQuote(1000, 'should fail')).rejects.toThrow(
+			/Mint does not support description for bolt11/,
+		);
+
+		//no description provided
+		server.use(
+			http.post(mintUrl + '/v1/mint/quote/bolt11', () => {
+				return HttpResponse.json({ quote: 'ok-quote', request: 'lnbc...' });
+			}),
+		);
+		await expect(wallet.createMintQuote(1000)).resolves.toHaveProperty('quote', 'ok-quote');
+	});
 });
 
 describe('test fees', () => {

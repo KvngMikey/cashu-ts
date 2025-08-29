@@ -956,6 +956,14 @@ class CashuWallet {
 	 *   specified amount and unit.
 	 */
 	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+		// Check if mint supports description for bolt11
+		if (description) {
+			const mintInfo = await this.lazyGetMintInfo();
+			if (!mintInfo.supportsDescription('bolt11')) {
+				throw new Error('Mint does not support description for bolt11');
+			}
+		}
+
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -1018,7 +1026,7 @@ class CashuWallet {
 	): Promise<Bolt12MintQuoteResponse> {
 		// Check if mint supports description for bolt12
 		const mintInfo = await this.lazyGetMintInfo();
-		if (options?.description && !mintInfo.supportsBolt12Description) {
+		if (options?.description && !mintInfo.supportsDescription('bolt12')) {
 			throw new Error('Mint does not support description for bolt12');
 		}
 
