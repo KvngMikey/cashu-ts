@@ -959,7 +959,7 @@ class CashuWallet {
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = await this.lazyGetMintInfo();
-			if (!mintInfo.supportsDescription('bolt11')) {
+			if (!mintInfo.supportsDescription('bolt11', this._unit)) {
 				throw new Error('Mint does not support description for bolt11');
 			}
 		}

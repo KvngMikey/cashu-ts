@@ -156,42 +156,33 @@ describe('test info', () => {
 			{ method: 'nostr', info: 'npub1337' },
 		]);
 	});
-	test('supportsDescription and createMintQuote description check', async () => {
-		//behaviour with original mintInfoResp
+	test('supportsDescription respects per-unit description support', async () => {
 		server.use(
 			http.get(mintUrl + '/v1/info', () => {
 				return HttpResponse.json(mintInfoResp);
 			}),
 		);
-		const wallet = new CashuWallet(mint, { unit });
+		const wallet = new CashuWallet(mint, { unit: 'sat' });
 		const info = await wallet.getMintInfo();
 
-		// mintInfoResp advertises description=true only for usd/eur; sat lacks it
-		expect(info.supportsDescription('bolt11')).toBe(false);
-		expect(info.supportsDescription('bolt12')).toBe(false);
-
-		//bolt11 description not supported
-		const noDescResp = JSON.parse(JSON.stringify(mintInfoResp));
-		const bolt11Method = noDescResp.nuts[4].methods.find((x: any) => x.method === 'bolt11');
-		if (bolt11Method) (bolt11Method.options ??= {}).description = false;
+		expect(info.supportsDescription('bolt11', 'sat')).toBe(true);
+		expect(info.supportsDescription('bolt11', 'usd')).toBe(false);
+		expect(info.supportsDescription('bolt12', 'sat')).toBe(false);
 
 		server.use(
-			http.get(mintUrl + '/v1/info', () => {
-				return HttpResponse.json(noDescResp);
-			}),
+			http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+				HttpResponse.json({ quote: 'sat-quote', request: 'lnbc...' }),
+			),
+		);
+		await expect(wallet.createMintQuote(1000, 'sat description')).resolves.toHaveProperty(
+			'quote',
+			'sat-quote',
 		);
 
-		await expect(wallet.createMintQuote(1000, 'should fail')).rejects.toThrow(
+		const usdWallet = new CashuWallet(mint, { unit: 'usd' });
+		await expect(usdWallet.createMintQuote(1000, 'usd description')).rejects.toThrow(
 			/Mint does not support description for bolt11/,
 		);
-
-		//no description provided
-		server.use(
-			http.post(mintUrl + '/v1/mint/quote/bolt11', () => {
-				return HttpResponse.json({ quote: 'ok-quote', request: 'lnbc...' });
-			}),
-		);
-		await expect(wallet.createMintQuote(1000)).resolves.toHaveProperty('quote', 'ok-quote');
 	});
 });
 
