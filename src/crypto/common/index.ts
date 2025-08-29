@@ -146,5 +146,3 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Min
 	});
 	return mintKeys;
 }
-
-export { deriveKeysetId, mergeUInt8Arrays } from '../../utils';
