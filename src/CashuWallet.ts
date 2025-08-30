@@ -1026,7 +1026,7 @@ class CashuWallet {
 	): Promise<Bolt12MintQuoteResponse> {
 		// Check if mint supports description for bolt12
 		const mintInfo = await this.lazyGetMintInfo();
-		if (options?.description && !mintInfo.supportsDescription('bolt12')) {
+		if (options?.description && !mintInfo.supportsDescription('bolt12', this._unit)) {
 			throw new Error('Mint does not support description for bolt12');
 		}
 

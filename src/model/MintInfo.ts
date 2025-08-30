@@ -136,12 +136,9 @@ export class MintInfo {
 	 * @param method - The payment method to check ('bolt11' or 'bolt12')
 	 * @returns True if the mint supports description for the method, false otherwise.
 	 */
-	supportsDescription(method: 'bolt11' | 'bolt12', unit?: string): boolean {
+	supportsDescription(method: 'bolt11' | 'bolt12', unit: string): boolean {
 		return this._mintInfo.nuts[4]?.methods.some(
-			(met) =>
-				met.method === method &&
-				(unit ? met.unit === unit : true) &&
-				met.options?.description === true,
+			(met) => met.method === method && met.unit === unit && met.options?.description === true,
 		);
 	}
 }
