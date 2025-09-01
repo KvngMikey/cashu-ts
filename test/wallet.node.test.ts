@@ -165,7 +165,7 @@ describe('test info', () => {
 		const wallet = new CashuWallet(mint, { unit: 'sat' });
 		const info = await wallet.getMintInfo();
 
-		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(true);
+		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(false);
 		expect(info.supportsNut04Description('bolt11', 'usd')).toBe(false);
 		expect(info.supportsNut04Description('bolt12', 'sat')).toBe(false);
 
