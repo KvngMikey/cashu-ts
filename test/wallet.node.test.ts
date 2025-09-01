@@ -156,7 +156,7 @@ describe('test info', () => {
 			{ method: 'nostr', info: 'npub1337' },
 		]);
 	});
-	test('supportsDescription respects per-unit description support', async () => {
+	test('supportsNut04Description respects per-unit description support', async () => {
 		server.use(
 			http.get(mintUrl + '/v1/info', () => {
 				return HttpResponse.json(mintInfoResp);
@@ -165,9 +165,9 @@ describe('test info', () => {
 		const wallet = new CashuWallet(mint, { unit: 'sat' });
 		const info = await wallet.getMintInfo();
 
-		expect(info.supportsDescription('bolt11', 'sat')).toBe(true);
-		expect(info.supportsDescription('bolt11', 'usd')).toBe(false);
-		expect(info.supportsDescription('bolt12', 'sat')).toBe(false);
+		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(true);
+		expect(info.supportsNut04Description('bolt11', 'usd')).toBe(false);
+		expect(info.supportsNut04Description('bolt12', 'sat')).toBe(false);
 
 		server.use(
 			http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
