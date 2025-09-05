@@ -96,7 +96,7 @@ describe('mint api', () => {
 	test('invoice with description', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
-		const quote = await wallet.createMintQuote(100, 'test description');
+		const quote = await wallet.createMintQuote(100);
 		expect(quote).toBeDefined();
 		console.log(`invoice with description: ${quote.request}`);
 	});
