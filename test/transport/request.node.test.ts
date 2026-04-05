@@ -960,7 +960,7 @@ describe('parseRetryAfter', () => {
 	});
 
 	test('returns undefined for negative delta-seconds string', () => {
-		// Negative values like "-1" don't match /^\d+$/ so treated as HTTP-date, which fails → undefined
+		// Negative values like "-1" don't match /^\d+$/ and contain no letters so bypass HTTP-date parsing too, returning undefined directly
 		expect(parseRetryAfter('-1')).toBeUndefined();
 	});
 

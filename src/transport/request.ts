@@ -54,16 +54,19 @@ export type ApiError = {
  * to `0`.
  */
 export function parseRetryAfter(header: string | null): number | undefined {
-	if (header === null || header === '') return undefined;
+	if (header === null) return undefined;
+
+	const header_value = header.trim();
+	if (header_value === '') return undefined;
 
 	//delta-seconds (non-negative integer)
-	if (/^\d+$/.test(header)) {
-		return Math.max(Number(header) * 1000, 0);
+	if (/^\d+$/.test(header_value)) {
+		return Math.max(Number(header_value) * 1000, 0);
 	}
 
 	//HTTP-date (must contain at least one letter, e.g. month name / day name)
-	if (/[a-zA-Z]/.test(header)) {
-		const date = new Date(header).getTime();
+	if (/[a-zA-Z]/.test(header_value)) {
+		const date = new Date(header_value).getTime();
 		if (!Number.isNaN(date)) {
 			return Math.max(date - Date.now(), 0);
 		}
