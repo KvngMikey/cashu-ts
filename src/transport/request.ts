@@ -18,6 +18,35 @@ export type RequestArgs = {
 	logger?: Logger;
 };
 
+/**
+ * Metadata extracted from every HTTP response. When `onResponseMeta` is provided in
+ * `RequestOptions`, the callback receives one of these on every response (both successes and
+ * errors) before the promise resolves or rejects.
+ */
+export type ResponseMeta = {
+	/**
+	 * HTTP status code of the response.
+	 */
+	status: number;
+	/**
+	 * Parsed `Retry-After` in ms (via `parseRetryAfter`). Present only when the header exists and is
+	 * parseable.
+	 */
+	retryAfterMs?: number;
+	/**
+	 * Raw value of the `RateLimit` (or Cloudflare `Ratelimit`) header, if present.
+	 */
+	rateLimit?: string;
+	/**
+	 * Raw value of the `RateLimit-Policy` (or Cloudflare `Ratelimit-Policy`) header, if present.
+	 */
+	rateLimitPolicy?: string;
+	/**
+	 * Full raw response headers.
+	 */
+	headers: Headers;
+};
+
 export type RequestOptions = RequestArgs &
 	Omit<RequestInit, 'body' | 'headers'> &
 	Partial<Nut19Policy> & {
@@ -27,6 +56,12 @@ export type RequestOptions = RequestArgs &
 		 * connection can consume the entire TTL retry window.
 		 */
 		requestTimeout?: number;
+		/**
+		 * Optional callback invoked on every HTTP response with structured rate-limit metadata. Fires
+		 * before the promise resolves (on success) or rejects (on error), so consumers always receive
+		 * metadata even when the request fails.
+		 */
+		onResponseMeta?: (meta: ResponseMeta) => void;
 	};
 
 /**
@@ -245,6 +280,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
 		requestBody,
 		headers: requestHeaders,
 		requestTimeout,
+		onResponseMeta,
 		// consumed by requestWithRetry, excluded from raw fetch options
 		cached_endpoints,
 		ttl,
@@ -332,6 +368,22 @@ async function _request(options: RequestOptions): Promise<unknown> {
 		cleanupAbortListeners?.();
 	}
 
+	// Build and fire ResponseMeta callback before any throw or return
+	if (onResponseMeta && response.headers) {
+		const meta: ResponseMeta = {
+			status: response.status,
+			retryAfterMs: parseRetryAfter(response.headers.get('Retry-After')),
+			rateLimit:
+				response.headers.get('RateLimit') ?? response.headers.get('Ratelimit') ?? undefined,
+			rateLimitPolicy:
+				response.headers.get('RateLimit-Policy') ??
+				response.headers.get('Ratelimit-Policy') ??
+				undefined,
+			headers: response.headers,
+		};
+		onResponseMeta(meta);
+	}
+
 	if (!response.ok) {
 		let errorData: ApiError;
 		try {
@@ -341,7 +393,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
 		}
 
 		if (response.status === 429) {
-			const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
+			const retryAfterMs = parseRetryAfter(response.headers?.get('Retry-After') ?? null);
 			throw new RateLimitError('429 Too Many Requests', retryAfterMs);
 		}
 

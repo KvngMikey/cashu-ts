@@ -5,6 +5,7 @@ import {
 	NetworkError,
 	MintOperationError,
 	RateLimitError,
+	type ResponseMeta,
 } from '../../src';
 import { HttpResponse, http, delay } from 'msw';
 import { setupServer } from 'msw/node';
@@ -1050,5 +1051,150 @@ describe('RateLimitError', () => {
 			const err = e as InstanceType<typeof RateLimitError>;
 			expect(err.retryAfterMs).toBeUndefined();
 		}
+	});
+});
+
+describe('onResponseMeta callback', () => {
+	test('fires on 200 response with full meta', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json(
+					{ keysets: [] },
+					{
+						headers: {
+							RateLimit: 'limit=100, remaining=99, reset=60',
+							'RateLimit-Policy': '100;w=60',
+						},
+					},
+				);
+			}),
+		);
+
+		let captured: ResponseMeta | undefined;
+		await request({ endpoint, onResponseMeta: (m) => (captured = m) });
+
+		expect(captured).toBeDefined();
+		expect(captured!.status).toBe(200);
+		expect(captured!.rateLimit).toBe('limit=100, remaining=99, reset=60');
+		expect(captured!.rateLimitPolicy).toBe('100;w=60');
+		expect(captured!.retryAfterMs).toBeUndefined();
+		expect(captured!.headers).toBeInstanceOf(Headers);
+	});
+
+	test('fires on 429 BEFORE RateLimitError is thrown', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return new HttpResponse(JSON.stringify({ error: 'Too Many Requests' }), {
+					status: 429,
+					headers: { 'Retry-After': '30' },
+				});
+			}),
+		);
+
+		let captured: ResponseMeta | undefined;
+		try {
+			await request({ endpoint, onResponseMeta: (m) => (captured = m) });
+			expect.unreachable();
+		} catch (e) {
+			expect(e).toBeInstanceOf(RateLimitError);
+		}
+		expect(captured).toBeDefined();
+		expect(captured!.status).toBe(429);
+		expect(captured!.retryAfterMs).toBe(30_000);
+	});
+
+	test('fires on other 4xx BEFORE HttpResponseError is thrown', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return new HttpResponse(JSON.stringify({ error: 'Not Found' }), { status: 404 });
+			}),
+		);
+
+		let captured: ResponseMeta | undefined;
+		try {
+			await request({ endpoint, onResponseMeta: (m) => (captured = m) });
+			expect.unreachable();
+		} catch (e) {
+			expect(e).toBeInstanceOf(HttpResponseError);
+		}
+		expect(captured).toBeDefined();
+		expect(captured!.status).toBe(404);
+	});
+
+	test('fires on 5xx BEFORE HttpResponseError is thrown', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return new HttpResponse(JSON.stringify({ error: 'Internal Server Error' }), {
+					status: 500,
+				});
+			}),
+		);
+
+		let captured: ResponseMeta | undefined;
+		try {
+			await request({ endpoint, onResponseMeta: (m) => (captured = m) });
+			expect.unreachable();
+		} catch (e) {
+			expect(e).toBeInstanceOf(HttpResponseError);
+		}
+		expect(captured).toBeDefined();
+		expect(captured!.status).toBe(500);
+	});
+
+	test('reads Cloudflare lowercase Ratelimit header variant', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json(
+					{ keysets: [] },
+					{
+						headers: {
+							Ratelimit: 'limit=50, remaining=49, reset=30',
+							'Ratelimit-Policy': '50;w=30',
+						},
+					},
+				);
+			}),
+		);
+
+		let captured: ResponseMeta | undefined;
+		await request({ endpoint, onResponseMeta: (m) => (captured = m) });
+
+		expect(captured).toBeDefined();
+		expect(captured!.rateLimit).toBe('limit=50, remaining=49, reset=30');
+		expect(captured!.rateLimitPolicy).toBe('50;w=30');
+	});
+
+	test('no callback means no error and identical behaviour', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json({ keysets: [] });
+			}),
+		);
+
+		// No onResponseMeta — should not throw
+		const result = await request({ endpoint });
+		expect(result).toEqual({ keysets: [] });
+	});
+
+	test('rateLimit and rateLimitPolicy are undefined when headers absent', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json({ keysets: [] });
+			}),
+		);
+
+		let captured: ResponseMeta | undefined;
+		await request({ endpoint, onResponseMeta: (m) => (captured = m) });
+
+		expect(captured).toBeDefined();
+		expect(captured!.rateLimit).toBeUndefined();
+		expect(captured!.rateLimitPolicy).toBeUndefined();
 	});
 });

@@ -17,6 +17,7 @@ import request, {
 	setRequestLogger,
 	type RequestFn,
 	type RequestOptions,
+	type ResponseMeta,
 } from '../transport';
 import {
 	isObj,
@@ -66,6 +67,7 @@ class Mint {
 	private _logger: Logger;
 	private _mintInfo?: MintInfo;
 	private _authProvider?: AuthProvider;
+	private _lastResponseMetadata: ResponseMeta | undefined = undefined;
 
 	/**
 	 * @param mintUrl Requires mint URL to create this object.
@@ -90,6 +92,14 @@ class Mint {
 
 	get mintUrl() {
 		return this._mintUrl;
+	}
+
+	/**
+	 * Metadata from the most recent HTTP response, including rate-limit headers. `undefined` before
+	 * any request has been made.
+	 */
+	get lastResponseMetadata(): ResponseMeta | undefined {
+		return this._lastResponseMetadata;
 	}
 
 	/**
@@ -126,6 +136,9 @@ class Mint {
 		const requestInstance = customRequest ?? this._request;
 		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(this._mintUrl, '/v1/info'),
+			onResponseMeta: (meta) => {
+				this._lastResponseMetadata = meta;
+			},
 		});
 		return MintInfo.normalizeInfo(response);
 	}
@@ -662,6 +675,9 @@ class Mint {
 			endpoint: keysetId
 				? joinUrls(targetUrl, '/v1/keys', keysetId)
 				: joinUrls(targetUrl, '/v1/keys'),
+			onResponseMeta: (meta) => {
+				this._lastResponseMetadata = meta;
+			},
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
@@ -685,6 +701,9 @@ class Mint {
 		const requestInstance = customRequest ?? this._request;
 		const data = await requestInstance<GetKeysetsResponse>({
 			endpoint: joinUrls(this._mintUrl, '/v1/keysets'),
+			onResponseMeta: (meta) => {
+				this._lastResponseMetadata = meta;
+			},
 		});
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
 			this._logger.error('Invalid response from mint...', { data, op: 'getKeySets' });
@@ -712,6 +731,9 @@ class Mint {
 			endpoint: joinUrls(this._mintUrl, '/v1/restore'),
 			method: 'POST',
 			requestBody: restorePayload,
+			onResponseMeta: (meta) => {
+				this._lastResponseMetadata = meta;
+			},
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
@@ -848,6 +870,9 @@ class Mint {
 			method,
 			headers,
 			...(nut19?.supported && nut19.params ? nut19.params : {}),
+			onResponseMeta: (meta) => {
+				this._lastResponseMetadata = meta;
+			},
 		});
 	}
 
