@@ -381,7 +381,12 @@ async function _request(options: RequestOptions): Promise<unknown> {
 				undefined,
 			headers: response.headers,
 		};
-		onResponseMeta(meta);
+		try {
+			onResponseMeta(meta);
+		} catch {
+			// Callback errors are intentionally ignored — metadata delivery is
+			// best-effort and must not affect request success/failure semantics.
+		}
 	}
 
 	if (!response.ok) {
