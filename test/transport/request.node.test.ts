@@ -239,6 +239,7 @@ describe('requests', { timeout: 7500 }, () => {
 		const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
 			ok: false,
 			status: 503,
+			headers: new Headers(),
 			text: vi.fn(async () => {
 				throw new Error('body read failed');
 			}),
@@ -1196,5 +1197,97 @@ describe('onResponseMeta callback', () => {
 		expect(captured).toBeDefined();
 		expect(captured!.rateLimit).toBeUndefined();
 		expect(captured!.rateLimitPolicy).toBeUndefined();
+	});
+
+	test('throwing callback logs error but does not affect request result', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json({ keysets: [] });
+			}),
+		);
+
+		const errorSpy = vi.fn();
+		const logger: Logger = { ...NULL_LOGGER, error: errorSpy };
+		setRequestLogger(logger);
+		try {
+			const result = await request({
+				endpoint,
+				onResponseMeta: () => {
+					throw new Error('boom');
+				},
+			});
+			expect(result).toEqual({ keysets: [] });
+			expect(errorSpy).toHaveBeenCalledWith('onResponseMeta callback failed:', {
+				err: expect.any(Error),
+			});
+		} finally {
+			setRequestLogger(NULL_LOGGER);
+		}
+	});
+
+	test('composes per-request and global callbacks via setGlobalRequestOptions', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json({ keysets: [] });
+			}),
+		);
+
+		const perRequestMetas: ResponseMeta[] = [];
+		const globalMetas: ResponseMeta[] = [];
+
+		setGlobalRequestOptions({
+			onResponseMeta: (m) => globalMetas.push(m),
+		});
+		try {
+			await request({
+				endpoint,
+				onResponseMeta: (m) => perRequestMetas.push(m),
+			});
+
+			expect(perRequestMetas).toHaveLength(1);
+			expect(globalMetas).toHaveLength(1);
+			expect(perRequestMetas[0].status).toBe(200);
+			expect(globalMetas[0].status).toBe(200);
+		} finally {
+			setGlobalRequestOptions({});
+		}
+	});
+
+	test('global callback fires even when per-request callback throws', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json({ keysets: [] });
+			}),
+		);
+
+		const globalMetas: ResponseMeta[] = [];
+		const errorSpy = vi.fn();
+		const logger: Logger = { ...NULL_LOGGER, error: errorSpy };
+		setRequestLogger(logger);
+		setGlobalRequestOptions({
+			onResponseMeta: (m) => globalMetas.push(m),
+		});
+		try {
+			const result = await request({
+				endpoint,
+				onResponseMeta: () => {
+					throw new Error('per-request boom');
+				},
+			});
+			expect(result).toEqual({ keysets: [] });
+			// Global still received metadata despite per-request throwing
+			expect(globalMetas).toHaveLength(1);
+			expect(globalMetas[0].status).toBe(200);
+			// Error was logged
+			expect(errorSpy).toHaveBeenCalledWith('onResponseMeta callback failed:', {
+				err: expect.any(Error),
+			});
+		} finally {
+			setGlobalRequestOptions({});
+			setRequestLogger(NULL_LOGGER);
+		}
 	});
 });

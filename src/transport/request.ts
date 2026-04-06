@@ -368,24 +368,24 @@ async function _request(options: RequestOptions): Promise<unknown> {
 		cleanupAbortListeners?.();
 	}
 
+	// Parse Retry-After once for reuse in both ResponseMeta and RateLimitError
+	const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
+
 	// Build and fire ResponseMeta callback before any throw or return
 	if (onResponseMeta && response.headers) {
 		const meta: ResponseMeta = {
 			status: response.status,
-			retryAfterMs: parseRetryAfter(response.headers.get('Retry-After')),
-			rateLimit:
-				response.headers.get('RateLimit') ?? response.headers.get('Ratelimit') ?? undefined,
-			rateLimitPolicy:
-				response.headers.get('RateLimit-Policy') ??
-				response.headers.get('Ratelimit-Policy') ??
-				undefined,
+			retryAfterMs,
+			rateLimit: response.headers.get('RateLimit') ?? undefined,
+			rateLimitPolicy: response.headers.get('RateLimit-Policy') ?? undefined,
 			headers: response.headers,
 		};
 		try {
 			onResponseMeta(meta);
-		} catch {
+		} catch (err) {
 			// Callback errors are intentionally ignored — metadata delivery is
 			// best-effort and must not affect request success/failure semantics.
+			requestLogger.error('onResponseMeta callback failed:', { err });
 		}
 	}
 
@@ -398,7 +398,6 @@ async function _request(options: RequestOptions): Promise<unknown> {
 		}
 
 		if (response.status === 429) {
-			const retryAfterMs = parseRetryAfter(response.headers?.get('Retry-After') ?? null);
 			throw new RateLimitError('429 Too Many Requests', retryAfterMs);
 		}
 
@@ -463,6 +462,20 @@ function parseErrorBody(errorText: string): ApiError {
  * endpoints without retry logic.
  */
 export default async function request<T>(options: RequestOptions): Promise<T> {
-	const data = await requestWithRetry({ ...options, ...globalRequestOptions });
+	const perRequest = options.onResponseMeta;
+	const global = globalRequestOptions.onResponseMeta;
+	const merged: RequestOptions = { ...options, ...globalRequestOptions };
+
+	if (perRequest && global && perRequest !== global) {
+		merged.onResponseMeta = (meta) => {
+			try {
+				perRequest(meta);
+			} finally {
+				global(meta);
+			}
+		};
+	}
+
+	const data = await requestWithRetry(merged);
 	return data as T;
 }
