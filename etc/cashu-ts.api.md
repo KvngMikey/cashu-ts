@@ -1475,6 +1475,7 @@ export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>
 
 // @public
 export type ResponseMeta = {
+    endpoint: string;
     status: number;
     retryAfterMs?: number;
     rateLimit?: string;

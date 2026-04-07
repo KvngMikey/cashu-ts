@@ -98,8 +98,14 @@ class Mint {
 	}
 
 	/**
-	 * Metadata from the most recent HTTP response, including rate-limit headers. `undefined` before
-	 * any request has been made.
+	 * Metadata from the most recent HTTP response, including rate-limit headers.
+	 *
+	 * `undefined` before any request has been made.
+	 *
+	 * @remarks
+	 * A convenience for coarse backoff planning. This getter is not request-scoped and may be
+	 * overwritten by concurrent requests. For more precise tracking, use the global `onResponseMeta`
+	 * callback. Rate limit policy is not widely supported, so ensure you handle `429` responses.
 	 */
 	get lastResponseMetadata(): ResponseMeta | undefined {
 		return this._lastResponseMetadata;

@@ -1076,6 +1076,7 @@ describe('onResponseMeta callback', () => {
 		await request({ endpoint, onResponseMeta: (m) => (captured = m) });
 
 		expect(captured).toBeDefined();
+		expect(captured!.endpoint).toBe(endpoint);
 		expect(captured!.status).toBe(200);
 		expect(captured!.rateLimit).toBe('limit=100, remaining=99, reset=60');
 		expect(captured!.rateLimitPolicy).toBe('100;w=60');
@@ -1102,6 +1103,7 @@ describe('onResponseMeta callback', () => {
 			expect(e).toBeInstanceOf(RateLimitError);
 		}
 		expect(captured).toBeDefined();
+		expect(captured!.endpoint).toBe(endpoint);
 		expect(captured!.status).toBe(429);
 		expect(captured!.retryAfterMs).toBe(30_000);
 	});
@@ -1122,6 +1124,7 @@ describe('onResponseMeta callback', () => {
 			expect(e).toBeInstanceOf(HttpResponseError);
 		}
 		expect(captured).toBeDefined();
+		expect(captured!.endpoint).toBe(endpoint);
 		expect(captured!.status).toBe(404);
 	});
 
@@ -1143,6 +1146,7 @@ describe('onResponseMeta callback', () => {
 			expect(e).toBeInstanceOf(HttpResponseError);
 		}
 		expect(captured).toBeDefined();
+		expect(captured!.endpoint).toBe(endpoint);
 		expect(captured!.status).toBe(500);
 	});
 
@@ -1166,6 +1170,7 @@ describe('onResponseMeta callback', () => {
 		await request({ endpoint, onResponseMeta: (m) => (captured = m) });
 
 		expect(captured).toBeDefined();
+		expect(captured!.endpoint).toBe(endpoint);
 		expect(captured!.rateLimit).toBe('limit=50, remaining=49, reset=30');
 		expect(captured!.rateLimitPolicy).toBe('50;w=30');
 	});
@@ -1195,11 +1200,12 @@ describe('onResponseMeta callback', () => {
 		await request({ endpoint, onResponseMeta: (m) => (captured = m) });
 
 		expect(captured).toBeDefined();
+		expect(captured!.endpoint).toBe(endpoint);
 		expect(captured!.rateLimit).toBeUndefined();
 		expect(captured!.rateLimitPolicy).toBeUndefined();
 	});
 
-	test('throwing callback is swallowed and logged', async () => {
+	test('throwing callback is swallowed via safeCallback', async () => {
 		const endpoint = mintUrl + '/v1/keys';
 		server.use(
 			http.get(endpoint, () => {
@@ -1207,8 +1213,8 @@ describe('onResponseMeta callback', () => {
 			}),
 		);
 
-		const errorSpy = vi.fn();
-		setRequestLogger({ ...NULL_LOGGER, error: errorSpy });
+		const warnSpy = vi.fn();
+		setRequestLogger({ ...NULL_LOGGER, warn: warnSpy });
 
 		const result = await request({
 			endpoint,
@@ -1220,10 +1226,50 @@ describe('onResponseMeta callback', () => {
 		setRequestLogger(NULL_LOGGER);
 
 		expect(result).toEqual({ keysets: [] });
-		expect(errorSpy).toHaveBeenCalledOnce();
-		expect(errorSpy).toHaveBeenCalledWith('onResponseMeta callback failed:', {
-			err: expect.any(Error),
+		expect(warnSpy).toHaveBeenCalledOnce();
+		expect(warnSpy).toHaveBeenCalledWith(
+			'callback failed',
+			expect.objectContaining({
+				op: 'request.onResponseMeta',
+				endpoint,
+				error: expect.any(Error),
+			}),
+		);
+	});
+
+	test('async rejection in callback does not produce unhandled rejection', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json({ keysets: [] });
+			}),
+		);
+
+		const warnSpy = vi.fn();
+		setRequestLogger({ ...NULL_LOGGER, warn: warnSpy });
+
+		const result = await request({
+			endpoint,
+			onResponseMeta: async () => {
+				throw new Error('async boom');
+			},
 		});
+
+		// Give microtask queue time to flush so the .catch handler fires
+		await new Promise((r) => setTimeout(r, 10));
+
+		setRequestLogger(NULL_LOGGER);
+
+		expect(result).toEqual({ keysets: [] });
+		expect(warnSpy).toHaveBeenCalledOnce();
+		expect(warnSpy).toHaveBeenCalledWith(
+			'callback failed',
+			expect.objectContaining({
+				op: 'request.onResponseMeta',
+				endpoint,
+				error: expect.any(Error),
+			}),
+		);
 	});
 
 	test('composes per-request and global callbacks', async () => {
@@ -1245,11 +1291,11 @@ describe('onResponseMeta callback', () => {
 
 		expect(perRequestSpy).toHaveBeenCalledOnce();
 		expect(globalSpy).toHaveBeenCalledOnce();
-		// Both receive the same meta object
-		expect(perRequestSpy.mock.calls[0][0]).toBe(globalSpy.mock.calls[0][0]);
+		expect(perRequestSpy.mock.calls[0][0].endpoint).toBe(endpoint);
+		expect(globalSpy.mock.calls[0][0].endpoint).toBe(endpoint);
 	});
 
-	test('global callback fires even when per-request callback throws', async () => {
+	test('global callback fires even when per-request callback throws sync', async () => {
 		const endpoint = mintUrl + '/v1/keys';
 		server.use(
 			http.get(endpoint, () => {
@@ -1258,8 +1304,8 @@ describe('onResponseMeta callback', () => {
 		);
 
 		const globalSpy = vi.fn();
-		const errorSpy = vi.fn();
-		setRequestLogger({ ...NULL_LOGGER, error: errorSpy });
+		const warnSpy = vi.fn();
+		setRequestLogger({ ...NULL_LOGGER, warn: warnSpy });
 		setGlobalRequestOptions({ onResponseMeta: globalSpy });
 
 		const result = await request({
@@ -1274,6 +1320,45 @@ describe('onResponseMeta callback', () => {
 
 		expect(result).toEqual({ keysets: [] });
 		expect(globalSpy).toHaveBeenCalledOnce();
-		expect(errorSpy).toHaveBeenCalledOnce();
+		expect(warnSpy).toHaveBeenCalledOnce();
+		expect(warnSpy).toHaveBeenCalledWith(
+			'callback failed',
+			expect.objectContaining({ scope: 'per-request' }),
+		);
+	});
+
+	test('global callback fires even when per-request callback rejects async', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return HttpResponse.json({ keysets: [] });
+			}),
+		);
+
+		const globalSpy = vi.fn();
+		const warnSpy = vi.fn();
+		setRequestLogger({ ...NULL_LOGGER, warn: warnSpy });
+		setGlobalRequestOptions({ onResponseMeta: globalSpy });
+
+		const result = await request({
+			endpoint,
+			onResponseMeta: async () => {
+				throw new Error('per-request async boom');
+			},
+		});
+
+		// flush microtask queue for async .catch handler
+		await new Promise((r) => setTimeout(r, 10));
+
+		setGlobalRequestOptions({});
+		setRequestLogger(NULL_LOGGER);
+
+		expect(result).toEqual({ keysets: [] });
+		expect(globalSpy).toHaveBeenCalledOnce();
+		expect(warnSpy).toHaveBeenCalledOnce();
+		expect(warnSpy).toHaveBeenCalledWith(
+			'callback failed',
+			expect.objectContaining({ scope: 'per-request' }),
+		);
 	});
 });

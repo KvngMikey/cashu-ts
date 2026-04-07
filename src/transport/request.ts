@@ -4,7 +4,7 @@ import {
 	MintOperationError,
 	RateLimitError,
 } from '../model/Errors';
-import { type Logger, NULL_LOGGER } from '../logger';
+import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import { type Nut19Policy } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
 
@@ -24,6 +24,11 @@ export type RequestArgs = {
  * errors) before the promise resolves or rejects.
  */
 export type ResponseMeta = {
+	/**
+	 * The request endpoint URL. Useful for global callbacks to identify which mint the response came
+	 * from.
+	 */
+	endpoint: string;
 	/**
 	 * HTTP status code of the response.
 	 */
@@ -374,19 +379,18 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	// Build and fire ResponseMeta callback before any throw or return
 	if (onResponseMeta && response.headers) {
 		const meta: ResponseMeta = {
+			endpoint,
 			status: response.status,
 			retryAfterMs,
 			rateLimit: response.headers.get('RateLimit') ?? undefined,
 			rateLimitPolicy: response.headers.get('RateLimit-Policy') ?? undefined,
 			headers: response.headers,
 		};
-		try {
-			onResponseMeta(meta);
-		} catch (err) {
-			// Callback errors are intentionally ignored — metadata delivery is
-			// best-effort and must not affect request success/failure semantics.
-			requestLogger.error('onResponseMeta callback failed:', { err });
-		}
+		safeCallback(onResponseMeta, meta, requestLogger, {
+			op: 'request.onResponseMeta',
+			status: response.status,
+			endpoint,
+		});
 	}
 
 	if (!response.ok) {
@@ -468,11 +472,16 @@ export default async function request<T>(options: RequestOptions): Promise<T> {
 
 	if (perRequest && global && perRequest !== global) {
 		merged.onResponseMeta = (meta) => {
-			try {
-				perRequest(meta);
-			} finally {
-				global(meta);
-			}
+			safeCallback(perRequest, meta, requestLogger, {
+				op: 'request.onResponseMeta',
+				scope: 'per-request',
+				endpoint: options.endpoint,
+			});
+			safeCallback(global, meta, requestLogger, {
+				op: 'request.onResponseMeta',
+				scope: 'global',
+				endpoint: options.endpoint,
+			});
 		};
 	}
 
