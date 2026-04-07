@@ -467,17 +467,21 @@ function parseErrorBody(errorText: string): ApiError {
  */
 export default async function request<T>(options: RequestOptions): Promise<T> {
 	const perRequest = options.onResponseMeta;
-	const global = globalRequestOptions.onResponseMeta;
+	const globalMeta = globalRequestOptions.onResponseMeta;
 	const merged: RequestOptions = { ...options, ...globalRequestOptions };
 
-	if (perRequest && global && perRequest !== global) {
+	// Default: per-request callback only
+	if (perRequest) merged.onResponseMeta = perRequest;
+
+	// Both set: wrap in safeCallback so a throw in one doesn't prevent the other from firing.
+	if (perRequest && globalMeta && perRequest !== globalMeta) {
 		merged.onResponseMeta = (meta) => {
 			safeCallback(perRequest, meta, requestLogger, {
 				op: 'request.onResponseMeta',
 				scope: 'per-request',
 				endpoint: options.endpoint,
 			});
-			safeCallback(global, meta, requestLogger, {
+			safeCallback(globalMeta, meta, requestLogger, {
 				op: 'request.onResponseMeta',
 				scope: 'global',
 				endpoint: options.endpoint,

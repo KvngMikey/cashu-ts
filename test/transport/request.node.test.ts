@@ -26,10 +26,14 @@ beforeAll(() => {
 
 afterEach(() => {
 	server.resetHandlers();
+	setRequestLogger(NULL_LOGGER);
+	setGlobalRequestOptions({});
 });
 
 afterAll(() => {
 	server.close();
+	setRequestLogger(NULL_LOGGER);
+	setGlobalRequestOptions({});
 });
 
 beforeEach(() => {
