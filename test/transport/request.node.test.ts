@@ -1199,7 +1199,7 @@ describe('onResponseMeta callback', () => {
 		expect(captured!.rateLimitPolicy).toBeUndefined();
 	});
 
-	test('throwing callback logs error but does not affect request result', async () => {
+	test('throwing callback is swallowed and logged', async () => {
 		const endpoint = mintUrl + '/v1/keys';
 		server.use(
 			http.get(endpoint, () => {
@@ -1208,25 +1208,25 @@ describe('onResponseMeta callback', () => {
 		);
 
 		const errorSpy = vi.fn();
-		const logger: Logger = { ...NULL_LOGGER, error: errorSpy };
-		setRequestLogger(logger);
-		try {
-			const result = await request({
-				endpoint,
-				onResponseMeta: () => {
-					throw new Error('boom');
-				},
-			});
-			expect(result).toEqual({ keysets: [] });
-			expect(errorSpy).toHaveBeenCalledWith('onResponseMeta callback failed:', {
-				err: expect.any(Error),
-			});
-		} finally {
-			setRequestLogger(NULL_LOGGER);
-		}
+		setRequestLogger({ ...NULL_LOGGER, error: errorSpy });
+
+		const result = await request({
+			endpoint,
+			onResponseMeta: () => {
+				throw new Error('boom');
+			},
+		});
+
+		setRequestLogger(NULL_LOGGER);
+
+		expect(result).toEqual({ keysets: [] });
+		expect(errorSpy).toHaveBeenCalledOnce();
+		expect(errorSpy).toHaveBeenCalledWith('onResponseMeta callback failed:', {
+			err: expect.any(Error),
+		});
 	});
 
-	test('composes per-request and global callbacks via setGlobalRequestOptions', async () => {
+	test('composes per-request and global callbacks', async () => {
 		const endpoint = mintUrl + '/v1/keys';
 		server.use(
 			http.get(endpoint, () => {
@@ -1234,25 +1234,19 @@ describe('onResponseMeta callback', () => {
 			}),
 		);
 
-		const perRequestMetas: ResponseMeta[] = [];
-		const globalMetas: ResponseMeta[] = [];
+		const perRequestSpy = vi.fn();
+		const globalSpy = vi.fn();
 
-		setGlobalRequestOptions({
-			onResponseMeta: (m) => globalMetas.push(m),
-		});
-		try {
-			await request({
-				endpoint,
-				onResponseMeta: (m) => perRequestMetas.push(m),
-			});
+		setGlobalRequestOptions({ onResponseMeta: globalSpy });
 
-			expect(perRequestMetas).toHaveLength(1);
-			expect(globalMetas).toHaveLength(1);
-			expect(perRequestMetas[0].status).toBe(200);
-			expect(globalMetas[0].status).toBe(200);
-		} finally {
-			setGlobalRequestOptions({});
-		}
+		await request({ endpoint, onResponseMeta: perRequestSpy });
+
+		setGlobalRequestOptions({});
+
+		expect(perRequestSpy).toHaveBeenCalledOnce();
+		expect(globalSpy).toHaveBeenCalledOnce();
+		// Both receive the same meta object
+		expect(perRequestSpy.mock.calls[0][0]).toBe(globalSpy.mock.calls[0][0]);
 	});
 
 	test('global callback fires even when per-request callback throws', async () => {
@@ -1263,31 +1257,23 @@ describe('onResponseMeta callback', () => {
 			}),
 		);
 
-		const globalMetas: ResponseMeta[] = [];
+		const globalSpy = vi.fn();
 		const errorSpy = vi.fn();
-		const logger: Logger = { ...NULL_LOGGER, error: errorSpy };
-		setRequestLogger(logger);
-		setGlobalRequestOptions({
-			onResponseMeta: (m) => globalMetas.push(m),
+		setRequestLogger({ ...NULL_LOGGER, error: errorSpy });
+		setGlobalRequestOptions({ onResponseMeta: globalSpy });
+
+		const result = await request({
+			endpoint,
+			onResponseMeta: () => {
+				throw new Error('per-request boom');
+			},
 		});
-		try {
-			const result = await request({
-				endpoint,
-				onResponseMeta: () => {
-					throw new Error('per-request boom');
-				},
-			});
-			expect(result).toEqual({ keysets: [] });
-			// Global still received metadata despite per-request throwing
-			expect(globalMetas).toHaveLength(1);
-			expect(globalMetas[0].status).toBe(200);
-			// Error was logged
-			expect(errorSpy).toHaveBeenCalledWith('onResponseMeta callback failed:', {
-				err: expect.any(Error),
-			});
-		} finally {
-			setGlobalRequestOptions({});
-			setRequestLogger(NULL_LOGGER);
-		}
+
+		setGlobalRequestOptions({});
+		setRequestLogger(NULL_LOGGER);
+
+		expect(result).toEqual({ keysets: [] });
+		expect(globalSpy).toHaveBeenCalledOnce();
+		expect(errorSpy).toHaveBeenCalledOnce();
 	});
 });
