@@ -413,6 +413,7 @@ export type GetInfoResponse = {
                 path: string;
             }>;
         };
+        '29'?: Nut29Info;
     };
     motd?: string;
 };
@@ -873,6 +874,11 @@ export class MintInfo {
         params?: Nut19Policy;
     };
     // (undocumented)
+    isSupported(num: 29): {
+        supported: boolean;
+        params?: Nut29Info;
+    };
+    // (undocumented)
     get motd(): string | undefined;
     // (undocumented)
     get name(): string;
@@ -940,6 +946,7 @@ export class MintInfo {
                 path: string;
             }>;
         };
+        '29'?: Nut29Info;
     };
     // (undocumented)
     get pubkey(): string;
@@ -1096,6 +1103,12 @@ export type Nut19Policy = {
         method: 'GET' | 'POST';
         path: string;
     }>;
+};
+
+// @public
+export type Nut29Info = {
+    methods?: string[];
+    max_batch_size?: number;
 };
 
 // @public (undocumented)

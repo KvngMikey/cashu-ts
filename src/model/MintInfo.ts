@@ -3,6 +3,7 @@ import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 import {
   type GetInfoResponse,
   type MPPMethod,
+  type Nut29Info,
   type SwapMethod,
   type WebSocketSupport,
   type Nut19Policy,
@@ -41,6 +42,7 @@ export class MintInfo {
         ...info.nuts,
         ...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19']) } : {}),
         ...(info.nuts['22'] ? { '22': MintInfo.normalizeNut22(info.nuts['22']) } : {}),
+        ...(info.nuts['29'] ? { '29': MintInfo.normalizeNut29(info.nuts['29']) } : {}),
       },
     };
   }
@@ -67,11 +69,30 @@ export class MintInfo {
     };
   }
 
+  private static normalizeNut29(
+    nut29: GetInfoResponse['nuts']['29'],
+  ): GetInfoResponse['nuts']['29'] {
+    if (!nut29) return nut29;
+
+    return {
+      ...nut29,
+      ...(nut29.max_batch_size != null
+        ? {
+            max_batch_size: normalizeSafeIntegerMetadata(
+              nut29.max_batch_size,
+              'nuts.29.max_batch_size',
+            ),
+          }
+        : {}),
+    };
+  }
+
   isSupported(num: 4 | 5): { disabled: boolean; params: SwapMethod[] };
   isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
   isSupported(num: 17): { supported: boolean; params?: WebSocketSupport[] };
   isSupported(num: 15): { supported: boolean; params?: MPPMethod[] };
   isSupported(num: 19): { supported: boolean; params?: Nut19Policy };
+  isSupported(num: 29): { supported: boolean; params?: Nut29Info };
   isSupported(num: number) {
     switch (num) {
       case 4:
@@ -96,6 +117,9 @@ export class MintInfo {
       }
       case 19: {
         return this.checkNut19();
+      }
+      case 29: {
+        return this.checkNut29();
       }
       default: {
         throw new Error('nut is not supported by cashu-ts');
@@ -169,6 +193,14 @@ export class MintInfo {
           cached_endpoints: rawPolicy.cached_endpoints,
         } as Nut19Policy,
       };
+    }
+    return { supported: false };
+  }
+
+  private checkNut29() {
+    const nut29 = this._mintInfo.nuts?.[29];
+    if (nut29) {
+      return { supported: true, params: nut29 };
     }
     return { supported: false };
   }

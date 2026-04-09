@@ -2004,6 +2004,26 @@ class Wallet {
   ): Promise<BatchMintPreview<TQuote>> {
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
 
+    // Enforce NUT-29 batch-size limit advertised by the mint
+    const nut29 = this._mintInfo?.isSupported(29);
+    const nut29Params = nut29?.supported ? nut29.params : undefined;
+    if (nut29Params?.max_batch_size != null) {
+      this.failIf(
+        entries.length > nut29Params.max_batch_size,
+        `prepareBatchMint: batch size ${entries.length} exceeds mint's ` +
+          `advertised limit of ${nut29Params.max_batch_size}`,
+      );
+    }
+
+    // Warn if the requested method is not in the mint's NUT-29 supported methods
+    if (nut29Params?.methods?.length) {
+      if (!nut29Params.methods.includes(method)) {
+        this._logger.warn(
+          `prepareBatchMint: method '${method}' is not in mint's advertised NUT-29 methods`,
+        );
+      }
+    }
+
     const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 
     // Validate all quotes

@@ -157,3 +157,68 @@ describe('MintInfo protected endpoint matching', () => {
     ).toThrow('nuts.19.ttl');
   });
 });
+
+describe('MintInfo NUT-29 batch minting info', () => {
+  it('returns supported:false when nuts["29"] is absent', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+      },
+    });
+    expect(info.isSupported(29)).toEqual({ supported: false });
+  });
+
+  it('returns supported:true with correct params when both max_batch_size and methods are present', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: 100, methods: ['bolt11', 'bolt12'] },
+      },
+    } as any);
+    expect(info.isSupported(29)).toEqual({
+      supported: true,
+      params: { max_batch_size: 100, methods: ['bolt11', 'bolt12'] },
+    });
+  });
+
+  it('returns supported:true with params when max_batch_size is omitted', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { methods: ['bolt11'] },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params).toEqual({ methods: ['bolt11'] });
+  });
+
+  it('returns supported:true with params when methods is omitted', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: 50 },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params).toEqual({ max_batch_size: 50 });
+  });
+
+  it('normalizes non-integer max_batch_size to integer', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: '100' as any },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params?.max_batch_size).toBe(100);
+  });
+});
