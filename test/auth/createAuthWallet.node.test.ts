@@ -139,6 +139,12 @@ describe('createAuthWallet wiring', () => {
 		expect(auth['maxPerMint']).toBe(10);
 	});
 
+	test('authPool above internal cap is clamped for desiredPoolSize and maxPerMint', async () => {
+		const { auth } = await createAuthWallet(mintUrl, { authPool: 1_000 });
+		expect(auth.poolTarget).toBe(100);
+		expect(auth['maxPerMint']).toBe(100);
+	});
+
 	test('onTokens → AuthManager.setCAT is wired (password grant triggers CAT set)', async () => {
 		const { auth, oidc } = await createAuthWallet(mintUrl, {
 			oidc: { scope: 'openid offline_access' },
