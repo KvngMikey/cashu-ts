@@ -130,13 +130,13 @@ describe('createAuthWallet wiring', () => {
 	test('authPool sets both desiredPoolSize and maxPerMint', async () => {
 		const { auth } = await createAuthWallet(mintUrl, { authPool: 25 });
 		expect(auth.poolTarget).toBe(25);
-		expect((auth as unknown as { maxPerMint: number }).maxPerMint).toBe(25);
+		expect(auth['maxPerMint']).toBe(25);
 	});
 
 	test('default authPool sets desiredPoolSize and maxPerMint to 10', async () => {
 		const { auth } = await createAuthWallet(mintUrl);
 		expect(auth.poolTarget).toBe(10);
-		expect((auth as unknown as { maxPerMint: number }).maxPerMint).toBe(10);
+		expect(auth['maxPerMint']).toBe(10);
 	});
 
 	test('onTokens → AuthManager.setCAT is wired (password grant triggers CAT set)', async () => {
