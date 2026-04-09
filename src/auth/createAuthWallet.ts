@@ -27,6 +27,7 @@ export async function createAuthWallet(
 	// 1. Create an AuthManager for both BAT and CAT handling
 	const auth = new AuthManager(mintUrl, {
 		desiredPoolSize: options?.authPool ?? 10,
+		maxPerMint: options?.authPool ?? 10,
 		logger: options?.logger,
 	});
 
