@@ -286,7 +286,7 @@ class Wallet {
     if (!this._mintInfo || forceRefresh) {
       promises.push(
         this.mint.getInfo().then((info) => {
-          this._mintInfo = new MintInfo(info);
+          this._mintInfo = new MintInfo(info, this._logger);
           this.mint.setMintInfo(this._mintInfo);
           return null;
         }),
@@ -310,7 +310,7 @@ class Wallet {
    * The `cache` argument should usually come from `wallet.keyChain.cache`.
    */
   loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void {
-    this._mintInfo = new MintInfo(mintInfo);
+    this._mintInfo = new MintInfo(mintInfo, this._logger);
     this.mint.setMintInfo(this._mintInfo);
     this._keyChain.loadFromCache(cache);
     this.finishInit();

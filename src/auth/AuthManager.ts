@@ -350,7 +350,7 @@ export class AuthManager implements AuthProvider {
         endpoint: joinUrls(this.mintUrl, '/v1/info'),
         method: 'GET',
       });
-      this.info = new MintInfo(info);
+      this.info = new MintInfo(info, this.logger);
     }
     if (!this.keychain) {
       // fetch blind keysets and keys for unit 'auth'

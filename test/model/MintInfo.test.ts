@@ -159,6 +159,17 @@ describe('MintInfo protected endpoint matching', () => {
 });
 
 describe('MintInfo NUT-29 batch minting info', () => {
+  function mockLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
   it('returns supported:false when nuts["29"] is absent', () => {
     const info = new MintInfo({
       ...MINTINFORESP,
@@ -183,7 +194,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
     });
   });
 
-  it('returns supported:true with params when max_batch_size is omitted', () => {
+  it('defaults max_batch_size to internal cap when omitted', () => {
     const info = new MintInfo({
       ...MINTINFORESP,
       nuts: {
@@ -193,7 +204,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
     } as any);
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
-    expect(result.params).toEqual({ methods: ['bolt11'] });
+    expect(result.params).toEqual({ methods: ['bolt11'], max_batch_size: 100 });
   });
 
   it('returns supported:true with params when methods is omitted', () => {
@@ -222,95 +233,105 @@ describe('MintInfo NUT-29 batch minting info', () => {
     expect(result.params?.max_batch_size).toBe(100);
   });
 
-  it('does not throw when max_batch_size is a float — treats as unset', () => {
-    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const info = new MintInfo({
-      ...MINTINFORESP,
-      nuts: {
-        ...MINTINFORESP.nuts,
-        29: { max_batch_size: 2.5, methods: ['bolt11'] },
-      },
-    } as any);
+  it('does not throw when max_batch_size is a float — defaults to internal cap', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          29: { max_batch_size: 2.5, methods: ['bolt11'] },
+        },
+      } as any,
+      logger,
+    );
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
-    expect(result.params?.max_batch_size).toBeUndefined();
-    expect(spy).toHaveBeenCalledWith(
+    expect(result.params?.max_batch_size).toBe(100);
+    expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('malformed'),
       expect.objectContaining({ value: 2.5 }),
     );
-    spy.mockRestore();
   });
 
-  it('does not throw when max_batch_size is NaN — treats as unset', () => {
-    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const info = new MintInfo({
-      ...MINTINFORESP,
-      nuts: {
-        ...MINTINFORESP.nuts,
-        29: { max_batch_size: NaN },
-      },
-    } as any);
+  it('does not throw when max_batch_size is NaN — defaults to internal cap', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          29: { max_batch_size: NaN },
+        },
+      } as any,
+      logger,
+    );
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
-    expect(result.params?.max_batch_size).toBeUndefined();
-    expect(spy).toHaveBeenCalledWith(
+    expect(result.params?.max_batch_size).toBe(100);
+    expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('malformed'),
       expect.objectContaining({ value: NaN }),
     );
-    spy.mockRestore();
   });
 
-  it('does not throw when max_batch_size is negative — treats as unset', () => {
-    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const info = new MintInfo({
-      ...MINTINFORESP,
-      nuts: {
-        ...MINTINFORESP.nuts,
-        29: { max_batch_size: -1 },
-      },
-    } as any);
+  it('does not throw when max_batch_size is negative — defaults to internal cap', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          29: { max_batch_size: -1 },
+        },
+      } as any,
+      logger,
+    );
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
-    expect(result.params?.max_batch_size).toBeUndefined();
-    expect(spy).toHaveBeenCalledWith(
+    expect(result.params?.max_batch_size).toBe(100);
+    expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('malformed'),
       expect.objectContaining({ value: -1 }),
     );
-    spy.mockRestore();
   });
 
   it('clamps max_batch_size above 100 to 100', () => {
-    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const info = new MintInfo({
-      ...MINTINFORESP,
-      nuts: {
-        ...MINTINFORESP.nuts,
-        29: { max_batch_size: 500 },
-      },
-    } as any);
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          29: { max_batch_size: 500 },
+        },
+      } as any,
+      logger,
+    );
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params?.max_batch_size).toBe(100);
-    expect(spy).toHaveBeenCalledWith(
+    expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('clamped'),
       expect.objectContaining({ advertised: 500, clampedTo: 100 }),
     );
-    spy.mockRestore();
   });
 
   it('does not clamp max_batch_size of exactly 100', () => {
-    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const info = new MintInfo({
-      ...MINTINFORESP,
-      nuts: {
-        ...MINTINFORESP.nuts,
-        29: { max_batch_size: 100 },
-      },
-    } as any);
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          29: { max_batch_size: 100 },
+        },
+      } as any,
+      logger,
+    );
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params?.max_batch_size).toBe(100);
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

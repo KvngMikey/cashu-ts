@@ -840,7 +840,7 @@ export type MintContactInfo = {
 
 // @public (undocumented)
 export class MintInfo {
-    constructor(info: GetInfoResponse);
+    constructor(info: GetInfoResponse, logger?: Logger);
     // (undocumented)
     get cache(): GetInfoResponse;
     // (undocumented)
@@ -883,7 +883,7 @@ export class MintInfo {
     // (undocumented)
     get name(): string;
     // (undocumented)
-    static normalizeInfo(info: GetInfoResponse): GetInfoResponse;
+    static normalizeInfo(info: GetInfoResponse, logger?: Logger): GetInfoResponse;
     // (undocumented)
     get nuts(): {
         '4': {
