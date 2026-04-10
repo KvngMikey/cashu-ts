@@ -335,3 +335,100 @@ describe('MintInfo NUT-29 batch minting info', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 });
+
+describe('MintInfo NUT-22 bat_max_mint normalization', () => {
+  function mockLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
+  it('defaults bat_max_mint to internal cap when malformed (float)', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          22: {
+            bat_max_mint: 2.5,
+            protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+          },
+        },
+      } as any,
+      logger,
+    );
+    expect(info.nuts['22']?.bat_max_mint).toBe(100);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('malformed'),
+      expect.objectContaining({ value: 2.5 }),
+    );
+  });
+
+  it('clamps bat_max_mint above 100 to 100', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          22: {
+            bat_max_mint: 500,
+            protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+          },
+        },
+      } as any,
+      logger,
+    );
+    expect(info.nuts['22']?.bat_max_mint).toBe(100);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('clamped'),
+      expect.objectContaining({ advertised: 500, clampedTo: 100 }),
+    );
+  });
+
+  it('does not clamp bat_max_mint at or below 100', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          22: {
+            bat_max_mint: 50,
+            protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+          },
+        },
+      } as any,
+      logger,
+    );
+    expect(info.nuts['22']?.bat_max_mint).toBe(50);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('skips normalization when nuts["22"] is absent', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+      },
+    });
+    expect(info.nuts['22']).toBeUndefined();
+  });
+
+  it('skips NUT-29 normalization when nuts["29"] is absent', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+      },
+    });
+    expect(info.nuts['29']).toBeUndefined();
+    expect(info.isSupported(29)).toEqual({ supported: false });
+  });
+});
