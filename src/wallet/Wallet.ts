@@ -50,6 +50,7 @@ import {
   sanitizeUrl,
   splitAmount,
   sumProofs,
+  ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
 import { getKeepAmounts } from './_internal';
@@ -2004,14 +2005,20 @@ class Wallet {
   ): Promise<BatchMintPreview<TQuote>> {
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
 
-    // Enforce NUT-29 batch-size limit advertised by the mint
+    // Enforce NUT-29 batch-size limit advertised by the mint, clamped to our absolute cap.
+    // If the mint does not advertise NUT-29 info, the absolute cap still applies.
     const nut29 = this._mintInfo?.isSupported(29);
     const nut29Params = nut29?.supported ? nut29.params : undefined;
-    if (nut29Params?.max_batch_size != null) {
+
+    const effectiveLimit = nut29Params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
+
+    if (entries.length > effectiveLimit) {
+      const limitSource =
+        nut29Params?.max_batch_size != null ? `mint's advertised limit` : `cashu-ts internal cap`;
       this.failIf(
-        entries.length > nut29Params.max_batch_size,
-        `prepareBatchMint: batch size ${entries.length} exceeds mint's ` +
-          `advertised limit of ${nut29Params.max_batch_size}`,
+        true,
+        `prepareBatchMint: batch size ${entries.length} exceeds ` +
+          `${limitSource} of ${effectiveLimit}`,
       );
     }
 

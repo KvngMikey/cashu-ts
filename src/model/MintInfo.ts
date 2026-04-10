@@ -1,3 +1,4 @@
+import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT } from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
 import {
@@ -63,9 +64,35 @@ export class MintInfo {
   ): GetInfoResponse['nuts']['22'] {
     if (!nut22) return nut22;
 
+    let bat_max_mint: number | undefined;
+    if (nut22.bat_max_mint != null) {
+      try {
+        bat_max_mint = normalizeSafeIntegerMetadata(
+          nut22.bat_max_mint,
+          'nuts.22.bat_max_mint',
+          ABSOLUTE_MAX_PER_MINT,
+        );
+      } catch {
+        // Malformed value from mint (e.g. float, NaN, negative).
+        // Static method — no instance logger available; console.warn is intentional here.
+        console.warn('MintInfo: nuts.22.bat_max_mint is malformed, defaulting to internal cap', {
+          value: nut22.bat_max_mint,
+        });
+      }
+    }
+
+    if (bat_max_mint != null && bat_max_mint > ABSOLUTE_MAX_PER_MINT) {
+      // Static method — no instance logger available; console.warn is intentional here.
+      console.warn('MintInfo: nuts.22.bat_max_mint exceeds internal cap and was clamped', {
+        advertised: bat_max_mint,
+        clampedTo: ABSOLUTE_MAX_PER_MINT,
+      });
+      bat_max_mint = ABSOLUTE_MAX_PER_MINT;
+    }
+
     return {
       ...nut22,
-      bat_max_mint: normalizeSafeIntegerMetadata(nut22.bat_max_mint, 'nuts.22.bat_max_mint'),
+      bat_max_mint: bat_max_mint ?? ABSOLUTE_MAX_PER_MINT,
     };
   }
 
@@ -74,16 +101,38 @@ export class MintInfo {
   ): GetInfoResponse['nuts']['29'] {
     if (!nut29) return nut29;
 
+    let max_batch_size: number | undefined;
+    if (nut29.max_batch_size != null) {
+      try {
+        max_batch_size = normalizeSafeIntegerMetadata(
+          nut29.max_batch_size,
+          'nuts.29.max_batch_size',
+          ABSOLUTE_MAX_BATCH_SIZE,
+        );
+      } catch {
+        // Malformed value from mint (e.g. float, NaN, negative).
+        // Treat as unset per NUT-29 spec
+        // Static method — no instance logger available; console.warn is intentional here.
+        console.warn('MintInfo: nuts.29.max_batch_size is malformed and will be treated as unset', {
+          value: nut29.max_batch_size,
+        });
+      }
+    }
+
+    if (max_batch_size != null && max_batch_size > ABSOLUTE_MAX_BATCH_SIZE) {
+      // Static method — no instance logger available; console.warn is intentional here.
+      console.warn('MintInfo: nuts.29.max_batch_size exceeds internal cap and was clamped', {
+        advertised: max_batch_size,
+        clampedTo: ABSOLUTE_MAX_BATCH_SIZE,
+      });
+      max_batch_size = ABSOLUTE_MAX_BATCH_SIZE;
+    }
+
+    // Note: intentionally does not spread ...nut29 to prevent malformed
+    // max_batch_size from surviving the catch path. Fields are listed explicitly.
     return {
-      ...nut29,
-      ...(nut29.max_batch_size != null
-        ? {
-            max_batch_size: normalizeSafeIntegerMetadata(
-              nut29.max_batch_size,
-              'nuts.29.max_batch_size',
-            ),
-          }
-        : {}),
+      methods: nut29.methods,
+      ...(max_batch_size != null ? { max_batch_size } : {}),
     };
   }
 

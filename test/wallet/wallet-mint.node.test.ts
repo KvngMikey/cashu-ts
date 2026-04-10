@@ -596,6 +596,28 @@ describe('NUT-29 max_batch_size enforcement', () => {
     await wallet.prepareBatchMint('bolt11', makeQuotes(2));
     expect(spyLogger.warn).not.toHaveBeenCalled();
   });
+
+  test('throws when entries exceed ABSOLUTE_MAX_BATCH_SIZE even without NUT-29 info', async () => {
+    // Default mint info has no nuts['29'] key — absolute cap still applies
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.prepareBatchMint('bolt11', makeQuotes(101))).rejects.toThrow(
+      /batch size 101.*internal cap.*100/,
+    );
+  });
+
+  test('throws when entries exceed ABSOLUTE_MAX_BATCH_SIZE even with higher mint limit', async () => {
+    // Mint advertises 500, but normalizeNut29 clamps to 100.
+    // Belt-and-suspenders: even if clamping were skipped, the wallet enforces the cap.
+    overrideMintInfo({ max_batch_size: 500 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.prepareBatchMint('bolt11', makeQuotes(101))).rejects.toThrow(
+      /batch size 101.*limit of 100/,
+    );
+  });
 });
 
 describe('generic mint/melt methods', () => {

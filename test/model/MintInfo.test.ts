@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { MintInfo } from '../../src/model/MintInfo';
 import { MINTINFORESP } from '../consts';
 
@@ -220,5 +220,97 @@ describe('MintInfo NUT-29 batch minting info', () => {
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params?.max_batch_size).toBe(100);
+  });
+
+  it('does not throw when max_batch_size is a float — treats as unset', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: 2.5, methods: ['bolt11'] },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params?.max_batch_size).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('malformed'),
+      expect.objectContaining({ value: 2.5 }),
+    );
+    spy.mockRestore();
+  });
+
+  it('does not throw when max_batch_size is NaN — treats as unset', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: NaN },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params?.max_batch_size).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('malformed'),
+      expect.objectContaining({ value: NaN }),
+    );
+    spy.mockRestore();
+  });
+
+  it('does not throw when max_batch_size is negative — treats as unset', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: -1 },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params?.max_batch_size).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('malformed'),
+      expect.objectContaining({ value: -1 }),
+    );
+    spy.mockRestore();
+  });
+
+  it('clamps max_batch_size above 100 to 100', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: 500 },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params?.max_batch_size).toBe(100);
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('clamped'),
+      expect.objectContaining({ advertised: 500, clampedTo: 100 }),
+    );
+    spy.mockRestore();
+  });
+
+  it('does not clamp max_batch_size of exactly 100', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: 100 },
+      },
+    } as any);
+    const result = info.isSupported(29);
+    expect(result.supported).toBe(true);
+    expect(result.params?.max_batch_size).toBe(100);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
